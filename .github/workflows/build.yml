@@ -99,14 +99,25 @@ jobs:
         mkdir -p release-files/{windows,linux}
         
         # Create a temporary directory for processing
+        rm -rf temp_files
         mkdir -p temp_files
         
+        # Debug: List all available files
+        echo "Available files before processing:"
+        find . -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" \)
+        
         # First, collect all files and rename them consistently
-        for file in **/*.dmg **/*.exe **/*.zip **/*.AppImage **/*.deb **/*.rpm; do
+        for file in */*/*.dmg */*/*.exe */*/*.zip */*/*.AppImage */*/*.deb */*/*.rpm; do
           if [ -f "$file" ]; then
+            echo "Processing file: $file"
             filename=$(basename "$file")
             dirname=$(dirname "$file")
             arch=$(echo "$dirname" | grep -o 'arm64\|x64')
+            
+            # Debug
+            echo "Filename: $filename"
+            echo "Directory: $dirname"
+            echo "Architecture: $arch"
             
             # Strip any existing architecture suffixes first
             basename="${filename%.*}"
@@ -117,13 +128,15 @@ jobs:
             basename="${basename%-amd64}"
             basename="${basename%-x86_64}"
             basename="${basename% Setup}"
+            basename="${basename%-1.0.0}"  # Remove version if present
             
             ext="${filename##*.}"
+            version="1.0.0"
             
             # Create consistent naming pattern and determine platform directory
             case "$ext" in
               "dmg"|"zip")
-                newname="${basename}-${arch}.${ext}"
+                newname="${basename}-${version}-${arch}.${ext}"
                 if [ "$arch" = "arm64" ]; then
                   platform_dir="macos/arm64"
                 else
@@ -132,55 +145,56 @@ jobs:
                 ;;
               "exe")
                 if [[ $filename == *"Setup"* ]]; then
-                  newname="${basename} Setup-${arch}.${ext}"
+                  newname="${basename} Setup-${version}-${arch}.${ext}"
                 else
-                  newname="${basename}-${arch}.${ext}"
+                  newname="${basename}-${version}-${arch}.${ext}"
                 fi
                 platform_dir="windows"
                 ;;
               "AppImage"|"deb"|"rpm")
                 case "$ext" in
                   "AppImage")
-                    newname="${basename}-${arch}.${ext}"
+                    newname="${basename}-${version}-${arch}.${ext}"
                     ;;
                   "deb")
-                    newname="${basename}_amd64.${ext}"
+                    newname="${basename}_${version}_amd64.${ext}"
                     ;;
                   "rpm")
-                    newname="${basename}.x86_64.${ext}"
+                    newname="${basename}-${version}.x86_64.${ext}"
                     ;;
                 esac
                 platform_dir="linux"
                 ;;
             esac
             
-            # Move to temp directory with unique name and platform info
-            cp "$file" "temp_files/${platform_dir//\//_}_${dirname//\//_}_${newname}"
+            # Debug
+            echo "New name: $newname"
+            echo "Platform dir: $platform_dir"
+            
+            # Create platform directory if it doesn't exist
+            mkdir -p "release-files/${platform_dir}"
+            
+            # Copy directly to final location
+            cp "$file" "release-files/${platform_dir}/${newname}"
+            
+            echo "Copied to: release-files/${platform_dir}/${newname}"
           fi
         done
         
-        # Move unique files to final platform-specific locations
-        for file in temp_files/*; do
-          if [ -f "$file" ]; then
-            platform_dir=$(echo $(basename "$file") | cut -d'_' -f1 | sed 's/_/\//g')
-            finalname=$(echo $(basename "$file") | cut -d'_' -f3-)
-            cp "$file" "release-files/${platform_dir}/${finalname}"
-          fi
-        done
-        
-        # Clean up temp directory
-        rm -rf temp_files
+        # Debug: List final structure
+        echo "Final directory structure:"
+        find release-files -type f
         
         # List final files by platform
         echo "Final release files:"
         echo "macOS (ARM64):"
-        ls -la release-files/macos/arm64/
+        ls -la release-files/macos/arm64/ || echo "Directory empty"
         echo "macOS (Intel):"
-        ls -la release-files/macos/intel/
+        ls -la release-files/macos/intel/ || echo "Directory empty"
         echo "Windows:"
-        ls -la release-files/windows/
+        ls -la release-files/windows/ || echo "Directory empty"
         echo "Linux:"
-        ls -la release-files/linux/
+        ls -la release-files/linux/ || echo "Directory empty"
     
     - name: Create Release
       id: create_release
@@ -192,11 +206,7 @@ jobs:
         name: Release v${{ env.VERSION }}
         draft: false
         prerelease: false
-        files: |
-          release-files/macos/arm64/*
-          release-files/macos/intel/*
-          release-files/windows/*
-          release-files/linux/*
+        files: release-files/**/*
         body: |
           Automated release for version ${{ env.VERSION }}
           
@@ -208,20 +218,20 @@ jobs:
           
           ### Available Downloads:
           #### macOS
-          - Apple Silicon (ARM64) (in macos/arm64 folder):
-            - `Arbiter Signer-arm64.dmg`
-            - `Arbiter Signer-arm64.zip`
-          - Intel (x64) (in macos/intel folder):
-            - `Arbiter Signer-x64.dmg`
-            - `Arbiter Signer-x64.zip`
+          - Apple Silicon (ARM64):
+            - `Arbiter Signer-1.0.0-arm64.dmg`
+            - `Arbiter Signer-1.0.0-arm64.zip`
+          - Intel (x64):
+            - `Arbiter Signer-1.0.0-x64.dmg`
+            - `Arbiter Signer-1.0.0-x64.zip`
           
-          #### Windows (in windows folder)
+          #### Windows
           - Intel/AMD (x64):
-            - `Arbiter Signer Setup-x64.exe`
-            - `Arbiter Signer-x64.exe`
+            - `Arbiter Signer Setup-1.0.0-x64.exe`
+            - `Arbiter Signer-1.0.0-x64.exe`
           
-          #### Linux (in linux folder)
+          #### Linux
           - x64:
-            - `Arbiter Signer-x64.AppImage`
-            - `arbiter-signer_amd64.deb`
-            - `arbiter-signer.x86_64.rpm`
+            - `Arbiter Signer-1.0.0-x64.AppImage`
+            - `arbiter-signer_1.0.0_amd64.deb`
+            - `arbiter-signer-1.0.0.x86_64.rpm`
