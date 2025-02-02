@@ -93,9 +93,9 @@ jobs:
       
     - name: Prepare Release Files
       run: |
-        # Clean up any existing release-files directory
+        # Clean up any existing directories
         rm -rf release-files
-        mkdir release-files
+        mkdir -p release-files/{macos,windows,linux}
         
         # Create a temporary directory for processing
         mkdir -p temp_files
@@ -119,10 +119,11 @@ jobs:
             
             ext="${filename##*.}"
             
-            # Create consistent naming pattern
+            # Create consistent naming pattern and determine platform directory
             case "$ext" in
-              "dmg"|"zip"|"AppImage")
+              "dmg"|"zip")
                 newname="${basename}-${arch}.${ext}"
+                platform_dir="macos"
                 ;;
               "exe")
                 if [[ $filename == *"Setup"* ]]; then
@@ -130,34 +131,49 @@ jobs:
                 else
                   newname="${basename}-${arch}.${ext}"
                 fi
+                platform_dir="windows"
                 ;;
-              "deb")
-                newname="${basename}_amd64.${ext}"
-                ;;
-              "rpm")
-                newname="${basename}.x86_64.${ext}"
+              "AppImage"|"deb"|"rpm")
+                case "$ext" in
+                  "AppImage")
+                    newname="${basename}-${arch}.${ext}"
+                    ;;
+                  "deb")
+                    newname="${basename}_amd64.${ext}"
+                    ;;
+                  "rpm")
+                    newname="${basename}.x86_64.${ext}"
+                    ;;
+                esac
+                platform_dir="linux"
                 ;;
             esac
             
-            # Move to temp directory with unique name
-            cp "$file" "temp_files/${dirname//\//_}_${newname}"
+            # Move to temp directory with unique name and platform info
+            cp "$file" "temp_files/${platform_dir}_${dirname//\//_}_${newname}"
           fi
         done
         
-        # Move unique files to final location
+        # Move unique files to final platform-specific locations
         for file in temp_files/*; do
           if [ -f "$file" ]; then
-            finalname=$(basename "$file" | cut -d'_' -f2-)
-            cp "$file" "release-files/$finalname"
+            platform_dir=$(echo $(basename "$file") | cut -d'_' -f1)
+            finalname=$(echo $(basename "$file") | cut -d'_' -f3-)
+            cp "$file" "release-files/${platform_dir}/${finalname}"
           fi
         done
         
         # Clean up temp directory
         rm -rf temp_files
         
-        # List final files
+        # List final files by platform
         echo "Final release files:"
-        ls -la release-files/
+        echo "macOS:"
+        ls -la release-files/macos/
+        echo "Windows:"
+        ls -la release-files/windows/
+        echo "Linux:"
+        ls -la release-files/linux/
     
     - name: Create Release
       id: create_release
@@ -169,7 +185,10 @@ jobs:
         name: Release v${{ env.VERSION }}
         draft: false
         prerelease: false
-        files: release-files/*
+        files: |
+          release-files/macos/*
+          release-files/windows/*
+          release-files/linux/*
         body: |
           Automated release for version ${{ env.VERSION }}
           
@@ -180,12 +199,12 @@ jobs:
           - Version based on date: ${{ env.VERSION }}
           
           ### Available Downloads:
-          #### macOS
+          #### macOS (in macos folder)
           - Apple Silicon (ARM64): `Arbiter Signer-arm64.dmg`, `Arbiter Signer-arm64.zip`
           - Intel (x64): `Arbiter Signer-x64.dmg`, `Arbiter Signer-x64.zip`
           
-          #### Windows
+          #### Windows (in windows folder)
           - Intel/AMD (x64): `Arbiter Signer Setup-x64.exe`, `Arbiter Signer-x64.exe`
           
-          #### Linux
+          #### Linux (in linux folder)
           - x64: `Arbiter Signer-x64.AppImage`, `arbiter-signer_amd64.deb`, `arbiter-signer.x86_64.rpm`
