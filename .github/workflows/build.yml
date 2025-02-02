@@ -93,8 +93,14 @@ jobs:
       
     - name: Prepare Release Files
       run: |
+        # Clean up any existing release-files directory
+        rm -rf release-files
         mkdir release-files
-        # Rename files to include architecture with consistent naming
+        
+        # Create a temporary directory for processing
+        mkdir -p temp_files
+        
+        # First, collect all files and rename them consistently
         for file in **/*.dmg **/*.exe **/*.zip **/*.AppImage **/*.deb **/*.rpm; do
           if [ -f "$file" ]; then
             filename=$(basename "$file")
@@ -133,12 +139,25 @@ jobs:
                 ;;
             esac
             
-            # Only copy if the file doesn't already exist
-            if [ ! -f "release-files/$newname" ]; then
-              cp "$file" "release-files/$newname"
-            fi
+            # Move to temp directory with unique name
+            cp "$file" "temp_files/${dirname//\//_}_${newname}"
           fi
         done
+        
+        # Move unique files to final location
+        for file in temp_files/*; do
+          if [ -f "$file" ]; then
+            finalname=$(basename "$file" | cut -d'_' -f2-)
+            cp "$file" "release-files/$finalname"
+          fi
+        done
+        
+        # Clean up temp directory
+        rm -rf temp_files
+        
+        # List final files
+        echo "Final release files:"
+        ls -la release-files/
     
     - name: Create Release
       id: create_release
