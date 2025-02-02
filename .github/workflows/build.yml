@@ -52,6 +52,8 @@ jobs:
       run: npm run build
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        ELECTRON_BUILDER_MAINTAINER: "maintainer@example.com"
+        ELECTRON_BUILDER_AUTHOR_EMAIL: "author@example.com"
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4

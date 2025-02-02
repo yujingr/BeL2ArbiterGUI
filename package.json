@@ -34,10 +34,15 @@
         "deb",
         "rpm"
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "maintainer": "Your Name <your.email@example.com>",
+      "category": "Utility"
     }
   },
-  "author": "JING YU",
+  "author": {
+    "name": "Your Name",
+    "email": "your.email@example.com"
+  },
   "license": "ISC",
   "devDependencies": {
     "electron": "^28.1.0",
