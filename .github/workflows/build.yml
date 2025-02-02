@@ -69,9 +69,19 @@ jobs:
           npm install -g electron-builder
 
       - name: Build application
-        run: npm run build
+        run: |
+          npm run build
+          electron-builder --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List dist directory
+        run: ls -R dist/
+        if: runner.os != 'Windows'
+
+      - name: List dist directory (Windows)
+        run: dir /s dist
+        if: runner.os == 'Windows'
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
@@ -79,7 +89,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./dist/${{ matrix.artifact_name }}
+          asset_path: ./dist/${{ matrix.platform }}/${{ matrix.artifact_name }}
           asset_name: ${{ matrix.artifact_name }}
           asset_content_type: application/octet-stream
 
