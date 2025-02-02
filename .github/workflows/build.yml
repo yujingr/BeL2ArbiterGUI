@@ -47,9 +47,9 @@ jobs:
       id: date
       run: |
         if [ "$RUNNER_OS" == "macOS" ]; then
-          echo "VERSION=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
+          echo "VERSION=$(date +'%Y.%m.%d.%H%M')" >> $GITHUB_ENV
         else
-          echo "VERSION=$(Get-Date -Format "yyyy.MM.dd")" >> $env:GITHUB_ENV
+          echo "VERSION=$(Get-Date -Format "yyyy.MM.dd.HHmm")" >> $env:GITHUB_ENV
         fi
       shell: bash
     
@@ -86,7 +86,7 @@ jobs:
     steps:
     - name: Get current date
       id: date
-      run: echo "VERSION=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
+      run: echo "VERSION=$(date +'%Y.%m.%d.%H%M')" >> $GITHUB_ENV
     
     - name: Download all artifacts
       uses: actions/download-artifact@v4
