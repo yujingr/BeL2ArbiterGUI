@@ -11,7 +11,7 @@ jobs:
     
     strategy:
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [macos-latest, windows-latest, ubuntu-latest]
         
     steps:
     - uses: actions/checkout@v3
@@ -21,6 +21,12 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
+    
+    - name: Install Linux Dependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y rpm
     
     - name: Get current date
       id: date
@@ -48,6 +54,9 @@ jobs:
           dist/*.dmg
           dist/*.exe
           dist/*.zip
+          dist/*.AppImage
+          dist/*.deb
+          dist/*.rpm
         if-no-files-found: ignore
 
   create-release:
@@ -76,6 +85,9 @@ jobs:
           **/*.dmg
           **/*.exe
           **/*.zip
+          **/*.AppImage
+          **/*.deb
+          **/*.rpm
         body: |
           Automated release for version ${{ env.VERSION }}
           
