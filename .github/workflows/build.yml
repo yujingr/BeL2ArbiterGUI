@@ -1,4 +1,4 @@
-name: Build and Release
+name: Build and Release Electron App
 
 on:
   push:
@@ -6,110 +6,81 @@ on:
   workflow_dispatch:
 
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-    
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Generate version number
-        id: version
-        run: |
-          VERSION="v$(date +'%Y.%m.%d')-$(date +'%H%M')"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Generated version: $VERSION"
-
-      - name: Create Release
-        id: create_release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          gh release create "$VERSION" \
-            --title "Release $VERSION" \
-            --notes "Creating release $VERSION" \
-            --draft=false \
-            --prerelease=false
-          echo "upload_url=$(gh api repos/${GITHUB_REPOSITORY}/releases/tags/$VERSION | jq -r .upload_url)" >> $GITHUB_OUTPUT
-
   build:
-    needs: create-release
     runs-on: ${{ matrix.os }}
     
     strategy:
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
-        include:
-          - os: macos-latest
-            platform: mac
-            artifact_name: arbiter-signer-setup-mac.dmg
-          - os: ubuntu-latest
-            platform: linux
-            artifact_name: arbiter-signer-setup-linux.AppImage
-          - os: windows-latest
-            platform: win
-            artifact_name: arbiter-signer-setup-win.exe
-
+        os: [macos-latest, windows-latest]
+        
     steps:
-      - uses: actions/checkout@v3
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Get current date
+      id: date
+      run: |
+        if [ "$RUNNER_OS" == "macOS" ]; then
+          echo "VERSION=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
+        else
+          echo "VERSION=$(Get-Date -Format "yyyy.MM.dd")" >> $env:GITHUB_ENV
+        fi
+      shell: bash
+    
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build Electron app
+      run: npm run build
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.os }}-build
+        path: |
+          dist/*.dmg
+          dist/*.exe
+          dist/*.zip
+        if-no-files-found: ignore
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
-      - name: Install dependencies
-        run: |
-          npm install
-          npm install -g electron-builder
-
-      - name: Build application
-        run: |
-          npm run build
-          electron-builder --publish never
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: List dist directory
-        run: ls -R dist/
-        if: runner.os != 'Windows'
-
-      - name: List dist directory (Windows)
-        run: dir /s dist
-        if: runner.os == 'Windows'
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./dist/${{ matrix.platform }}/${{ matrix.artifact_name }}
-          asset_name: ${{ matrix.artifact_name }}
-          asset_content_type: application/octet-stream
-
-  update-release:
-    needs: [create-release, build]
+  create-release:
+    needs: build
     runs-on: ubuntu-latest
     
     steps:
-      - name: Update Release Body
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ needs.create-release.outputs.version }}
-          body: |
-            Release ${{ needs.create-release.outputs.version }}
-            
-            This release includes builds for:
-            - Windows (.exe)
-            - macOS (.dmg)
-            - Linux (.AppImage)
-            
-            Download the appropriate version for your operating system.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Get current date
+      id: date
+      run: echo "VERSION=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ env.VERSION }}
+        name: Release v${{ env.VERSION }}
+        draft: false
+        prerelease: false
+        files: |
+          **/*.dmg
+          **/*.exe
+          **/*.zip
+        body: |
+          Automated release for version ${{ env.VERSION }}
+          
+          This release was automatically generated on $(date +'%Y-%m-%d %H:%M:%S')
+          
+          ### Changes in this release:
+          - Automated build from main branch
+          - Version based on date: ${{ env.VERSION }}

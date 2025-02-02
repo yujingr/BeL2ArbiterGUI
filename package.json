@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder",
+    "build": "electron-builder --publish never",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "build": {
@@ -13,11 +13,20 @@
     "productName": "Arbiter Signer",
     "mac": {
       "target": "dmg",
-      "icon": "build/icon.icns"
+      "icon": "build/icon.icns",
+      "category": "your.app.category",
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "win": {
       "target": "nsis",
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "linux": {
       "target": "AppImage",
