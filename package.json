@@ -12,13 +12,24 @@
     "appId": "com.bel2labs.arbitersigner",
     "productName": "Arbiter Signer",
     "mac": {
-      "target": "dmg",
-      "icon": "build/icon.icns",
-      "category": "your.app.category",
       "target": [
-        "dmg",
-        "zip"
-      ]
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "category": "your.app.category"
     },
     "win": {
       "target": "nsis",

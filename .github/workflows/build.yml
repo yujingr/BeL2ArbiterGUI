@@ -18,7 +18,15 @@ jobs:
     
     strategy:
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        include:
+          - os: macos-latest
+            arch: arm64
+          - os: macos-latest
+            arch: x64
+          - os: windows-latest
+            arch: x64
+          - os: ubuntu-latest
+            arch: x64
         
     steps:
     - uses: actions/checkout@v3
@@ -54,11 +62,12 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         ELECTRON_BUILDER_MAINTAINER: "maintainer@example.com"
         ELECTRON_BUILDER_AUTHOR_EMAIL: "author@example.com"
+        ARCH: ${{ matrix.arch }}
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.os }}-build
+        name: ${{ matrix.os }}-${{ matrix.arch }}-build
         path: |
           dist/*.dmg
           dist/*.exe
@@ -82,6 +91,21 @@ jobs:
     - name: Download all artifacts
       uses: actions/download-artifact@v4
       
+    - name: Prepare Release Files
+      run: |
+        mkdir release-files
+        # Rename files to include architecture
+        for file in **/*.dmg **/*.exe **/*.zip **/*.AppImage **/*.deb **/*.rpm; do
+          if [ -f "$file" ]; then
+            filename=$(basename "$file")
+            dirname=$(dirname "$file")
+            arch=$(echo "$dirname" | grep -o 'arm64\|x64')
+            ext="${filename##*.}"
+            newname="${filename%.*}-${arch}.${ext}"
+            cp "$file" "release-files/$newname"
+          fi
+        done
+    
     - name: Create Release
       id: create_release
       uses: softprops/action-gh-release@v1
@@ -92,13 +116,7 @@ jobs:
         name: Release v${{ env.VERSION }}
         draft: false
         prerelease: false
-        files: |
-          **/*.dmg
-          **/*.exe
-          **/*.zip
-          **/*.AppImage
-          **/*.deb
-          **/*.rpm
+        files: release-files/*
         body: |
           Automated release for version ${{ env.VERSION }}
           
@@ -107,3 +125,9 @@ jobs:
           ### Changes in this release:
           - Automated build from main branch
           - Version based on date: ${{ env.VERSION }}
+          
+          ### Available Downloads:
+          - macOS ARM64 (Apple Silicon): *-arm64.dmg, *-arm64.zip
+          - macOS Intel: *-x64.dmg, *-x64.zip
+          - Windows: *-x64.exe
+          - Linux: *-x64.AppImage, *-x64.deb, *-x64.rpm
