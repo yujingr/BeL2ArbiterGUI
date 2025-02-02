@@ -95,7 +95,8 @@ jobs:
       run: |
         # Clean up any existing directories
         rm -rf release-files
-        mkdir -p release-files/{macos,windows,linux}
+        mkdir -p release-files/macos/{arm64,intel}
+        mkdir -p release-files/{windows,linux}
         
         # Create a temporary directory for processing
         mkdir -p temp_files
@@ -123,7 +124,11 @@ jobs:
             case "$ext" in
               "dmg"|"zip")
                 newname="${basename}-${arch}.${ext}"
-                platform_dir="macos"
+                if [ "$arch" = "arm64" ]; then
+                  platform_dir="macos/arm64"
+                else
+                  platform_dir="macos/intel"
+                fi
                 ;;
               "exe")
                 if [[ $filename == *"Setup"* ]]; then
@@ -150,14 +155,14 @@ jobs:
             esac
             
             # Move to temp directory with unique name and platform info
-            cp "$file" "temp_files/${platform_dir}_${dirname//\//_}_${newname}"
+            cp "$file" "temp_files/${platform_dir//\//_}_${dirname//\//_}_${newname}"
           fi
         done
         
         # Move unique files to final platform-specific locations
         for file in temp_files/*; do
           if [ -f "$file" ]; then
-            platform_dir=$(echo $(basename "$file") | cut -d'_' -f1)
+            platform_dir=$(echo $(basename "$file") | cut -d'_' -f1 | sed 's/_/\//g')
             finalname=$(echo $(basename "$file") | cut -d'_' -f3-)
             cp "$file" "release-files/${platform_dir}/${finalname}"
           fi
@@ -168,8 +173,10 @@ jobs:
         
         # List final files by platform
         echo "Final release files:"
-        echo "macOS:"
-        ls -la release-files/macos/
+        echo "macOS (ARM64):"
+        ls -la release-files/macos/arm64/
+        echo "macOS (Intel):"
+        ls -la release-files/macos/intel/
         echo "Windows:"
         ls -la release-files/windows/
         echo "Linux:"
@@ -186,7 +193,8 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          release-files/macos/*
+          release-files/macos/arm64/*
+          release-files/macos/intel/*
           release-files/windows/*
           release-files/linux/*
         body: |
@@ -199,12 +207,21 @@ jobs:
           - Version based on date: ${{ env.VERSION }}
           
           ### Available Downloads:
-          #### macOS (in macos folder)
-          - Apple Silicon (ARM64): `Arbiter Signer-arm64.dmg`, `Arbiter Signer-arm64.zip`
-          - Intel (x64): `Arbiter Signer-x64.dmg`, `Arbiter Signer-x64.zip`
+          #### macOS
+          - Apple Silicon (ARM64) (in macos/arm64 folder):
+            - `Arbiter Signer-arm64.dmg`
+            - `Arbiter Signer-arm64.zip`
+          - Intel (x64) (in macos/intel folder):
+            - `Arbiter Signer-x64.dmg`
+            - `Arbiter Signer-x64.zip`
           
           #### Windows (in windows folder)
-          - Intel/AMD (x64): `Arbiter Signer Setup-x64.exe`, `Arbiter Signer-x64.exe`
+          - Intel/AMD (x64):
+            - `Arbiter Signer Setup-x64.exe`
+            - `Arbiter Signer-x64.exe`
           
           #### Linux (in linux folder)
-          - x64: `Arbiter Signer-x64.AppImage`, `arbiter-signer_amd64.deb`, `arbiter-signer.x86_64.rpm`
+          - x64:
+            - `Arbiter Signer-x64.AppImage`
+            - `arbiter-signer_amd64.deb`
+            - `arbiter-signer.x86_64.rpm`
