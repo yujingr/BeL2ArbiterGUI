@@ -27,7 +27,7 @@
   "author": "JING YU",
   "license": "ISC",
   "devDependencies": {
-    "electron": "^latest",
-    "electron-builder": "^latest"
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1"
   }
 }
