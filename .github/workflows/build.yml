@@ -94,15 +94,49 @@ jobs:
     - name: Prepare Release Files
       run: |
         mkdir release-files
-        # Rename files to include architecture
+        # Rename files to include architecture with consistent naming
         for file in **/*.dmg **/*.exe **/*.zip **/*.AppImage **/*.deb **/*.rpm; do
           if [ -f "$file" ]; then
             filename=$(basename "$file")
             dirname=$(dirname "$file")
             arch=$(echo "$dirname" | grep -o 'arm64\|x64')
+            
+            # Strip any existing architecture suffixes first
+            basename="${filename%.*}"
+            basename="${basename%-arm64}"
+            basename="${basename%-x64}"
+            basename="${basename%-mac-arm64}"
+            basename="${basename%-mac-x64}"
+            basename="${basename%-amd64}"
+            basename="${basename%-x86_64}"
+            basename="${basename% Setup}"
+            
             ext="${filename##*.}"
-            newname="${filename%.*}-${arch}.${ext}"
-            cp "$file" "release-files/$newname"
+            
+            # Create consistent naming pattern
+            case "$ext" in
+              "dmg"|"zip"|"AppImage")
+                newname="${basename}-${arch}.${ext}"
+                ;;
+              "exe")
+                if [[ $filename == *"Setup"* ]]; then
+                  newname="${basename} Setup-${arch}.${ext}"
+                else
+                  newname="${basename}-${arch}.${ext}"
+                fi
+                ;;
+              "deb")
+                newname="${basename}_amd64.${ext}"
+                ;;
+              "rpm")
+                newname="${basename}.x86_64.${ext}"
+                ;;
+            esac
+            
+            # Only copy if the file doesn't already exist
+            if [ ! -f "release-files/$newname" ]; then
+              cp "$file" "release-files/$newname"
+            fi
           fi
         done
     
@@ -127,7 +161,12 @@ jobs:
           - Version based on date: ${{ env.VERSION }}
           
           ### Available Downloads:
-          - macOS ARM64 (Apple Silicon): *-arm64.dmg, *-arm64.zip
-          - macOS Intel: *-x64.dmg, *-x64.zip
-          - Windows: *-x64.exe
-          - Linux: *-x64.AppImage, *-x64.deb, *-x64.rpm
+          #### macOS
+          - Apple Silicon (ARM64): `Arbiter Signer-arm64.dmg`, `Arbiter Signer-arm64.zip`
+          - Intel (x64): `Arbiter Signer-x64.dmg`, `Arbiter Signer-x64.zip`
+          
+          #### Windows
+          - Intel/AMD (x64): `Arbiter Signer Setup-x64.exe`, `Arbiter Signer-x64.exe`
+          
+          #### Linux
+          - x64: `Arbiter Signer-x64.AppImage`, `arbiter-signer_amd64.deb`, `arbiter-signer.x86_64.rpm`
