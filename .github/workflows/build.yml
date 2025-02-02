@@ -93,108 +93,27 @@ jobs:
       
     - name: Prepare Release Files
       run: |
-        # Clean up any existing directories
-        rm -rf release-files
-        mkdir -p release-files/macos/{arm64,intel}
-        mkdir -p release-files/{windows,linux}
-        
-        # Create a temporary directory for processing
-        rm -rf temp_files
-        mkdir -p temp_files
+        # Create platform directories
+        mkdir -p release-files/{macos,windows,linux}
         
         # Debug: List all available files
-        echo "Available files before processing:"
-        find . -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" \)
+        echo "Available files:"
+        find . -type f
         
-        # First, collect all files and rename them consistently
-        for file in */*/*.dmg */*/*.exe */*/*.zip */*/*.AppImage */*/*.deb */*/*.rpm; do
-          if [ -f "$file" ]; then
-            echo "Processing file: $file"
-            filename=$(basename "$file")
-            dirname=$(dirname "$file")
-            arch=$(echo "$dirname" | grep -o 'arm64\|x64')
-            
-            # Debug
-            echo "Filename: $filename"
-            echo "Directory: $dirname"
-            echo "Architecture: $arch"
-            
-            # Strip any existing architecture suffixes first
-            basename="${filename%.*}"
-            basename="${basename%-arm64}"
-            basename="${basename%-x64}"
-            basename="${basename%-mac-arm64}"
-            basename="${basename%-mac-x64}"
-            basename="${basename%-amd64}"
-            basename="${basename%-x86_64}"
-            basename="${basename% Setup}"
-            basename="${basename%-1.0.0}"  # Remove version if present
-            
-            ext="${filename##*.}"
-            version="1.0.0"
-            
-            # Create consistent naming pattern and determine platform directory
-            case "$ext" in
-              "dmg"|"zip")
-                newname="${basename}-${version}-${arch}.${ext}"
-                if [ "$arch" = "arm64" ]; then
-                  platform_dir="macos/arm64"
-                else
-                  platform_dir="macos/intel"
-                fi
-                ;;
-              "exe")
-                if [[ $filename == *"Setup"* ]]; then
-                  newname="${basename} Setup-${version}-${arch}.${ext}"
-                else
-                  newname="${basename}-${version}-${arch}.${ext}"
-                fi
-                platform_dir="windows"
-                ;;
-              "AppImage"|"deb"|"rpm")
-                case "$ext" in
-                  "AppImage")
-                    newname="${basename}-${version}-${arch}.${ext}"
-                    ;;
-                  "deb")
-                    newname="${basename}_${version}_amd64.${ext}"
-                    ;;
-                  "rpm")
-                    newname="${basename}-${version}.x86_64.${ext}"
-                    ;;
-                esac
-                platform_dir="linux"
-                ;;
-            esac
-            
-            # Debug
-            echo "New name: $newname"
-            echo "Platform dir: $platform_dir"
-            
-            # Create platform directory if it doesn't exist
-            mkdir -p "release-files/${platform_dir}"
-            
-            # Copy directly to final location
-            cp "$file" "release-files/${platform_dir}/${newname}"
-            
-            echo "Copied to: release-files/${platform_dir}/${newname}"
+        # Move files to their respective platform folders
+        for artifact_dir in */; do
+          if [[ $artifact_dir == *"macos"* ]]; then
+            mv "$artifact_dir"/*.{dmg,zip} release-files/macos/ 2>/dev/null || true
+          elif [[ $artifact_dir == *"windows"* ]]; then
+            mv "$artifact_dir"/*.exe release-files/windows/ 2>/dev/null || true
+          elif [[ $artifact_dir == *"ubuntu"* ]]; then
+            mv "$artifact_dir"/*.{AppImage,deb,rpm} release-files/linux/ 2>/dev/null || true
           fi
         done
         
         # Debug: List final structure
         echo "Final directory structure:"
         find release-files -type f
-        
-        # List final files by platform
-        echo "Final release files:"
-        echo "macOS (ARM64):"
-        ls -la release-files/macos/arm64/ || echo "Directory empty"
-        echo "macOS (Intel):"
-        ls -la release-files/macos/intel/ || echo "Directory empty"
-        echo "Windows:"
-        ls -la release-files/windows/ || echo "Directory empty"
-        echo "Linux:"
-        ls -la release-files/linux/ || echo "Directory empty"
     
     - name: Create Release
       id: create_release
@@ -214,24 +133,10 @@ jobs:
           
           ### Changes in this release:
           - Automated build from main branch
-          - Version based on date: ${{ env.VERSION }}
+          - Version: ${{ env.VERSION }}
           
           ### Available Downloads:
-          #### macOS
-          - Apple Silicon (ARM64):
-            - `Arbiter Signer-1.0.0-arm64.dmg`
-            - `Arbiter Signer-1.0.0-arm64.zip`
-          - Intel (x64):
-            - `Arbiter Signer-1.0.0-x64.dmg`
-            - `Arbiter Signer-1.0.0-x64.zip`
-          
-          #### Windows
-          - Intel/AMD (x64):
-            - `Arbiter Signer Setup-1.0.0-x64.exe`
-            - `Arbiter Signer-1.0.0-x64.exe`
-          
-          #### Linux
-          - x64:
-            - `Arbiter Signer-1.0.0-x64.AppImage`
-            - `arbiter-signer_1.0.0_amd64.deb`
-            - `arbiter-signer-1.0.0.x86_64.rpm`
+          Check the assets section below for all available files for your platform:
+          - macOS: DMG and ZIP files
+          - Windows: EXE files
+          - Linux: AppImage, DEB, and RPM files
