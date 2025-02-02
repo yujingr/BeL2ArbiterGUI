@@ -41,7 +41,7 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.os }}-build
         path: |
@@ -60,7 +60,7 @@ jobs:
       run: echo "VERSION=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
     
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       
     - name: Create Release
       id: create_release
