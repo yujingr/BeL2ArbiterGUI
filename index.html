@@ -1,0 +1,283 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Arbiter Signer Setup</title>
+    <style>
+      body {
+          font-family: Arial, sans-serif;
+          padding: 20px;
+          background-color: #f5f5f5;
+      }
+      .container {
+          max-width: 600px;
+          margin: 0 auto;
+          background-color: white;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      button {
+          background-color: #4CAF50;
+          color: white;
+          padding: 10px 20px;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          margin: 10px 0;
+      }
+      button:hover {
+          background-color: #45a049;
+      }
+      #output {
+          margin-top: 20px;
+          padding: 10px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          min-height: 100px;
+          white-space: pre-wrap;
+      }
+      .spinner {
+          display: none;
+          margin: 10px 0;
+      }
+      .spinner.active {
+          display: inline-block;
+      }
+      #inputSection {
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-radius: 4px;
+        margin: 20px 0;
+        border: 1px solid #dee2e6;
+      }
+
+      #userInput, #passwordInput {
+        width: 100%;
+        padding: 12px;
+        margin: 10px 0;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        box-sizing: border-box;
+        font-family: monospace;
+      }
+
+      #passwordInput {
+        display: none; /* Initially hidden, will show when needed */
+      }
+
+      #submitInput {
+        background-color: #007bff;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        width: 100%;
+        margin-top: 10px;
+      }
+
+      #submitInput:hover {
+        background-color: #0056b3;
+      }
+
+      #promptText {
+        margin: 0;
+        color: #495057;
+        font-weight: bold;
+      }
+
+      #goCheck {
+        background-color: #fff3cd;
+        border: 1px solid #ffeeba;
+        color: #856404;
+      }
+
+      #goCheck.success {
+        background-color: #d4edda;
+        border-color: #c3e6cb;
+        color: #155724;
+      }
+
+      .download-link {
+        display: inline-block;
+        background-color: #007bff;
+        color: white;
+        padding: 10px 20px;
+        text-decoration: none;
+        border-radius: 4px;
+        margin: 10px 0;
+      }
+
+      .download-link:hover {
+        background-color: #0056b3;
+        text-decoration: none;
+        color: white;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div
+        id="goCheck"
+        style="display: none; margin-bottom: 20px; padding: 15px; border-radius: 4px;"
+      >
+        <p id="goStatus"></p>
+        <div id="goDownload" style="display: none;">
+          <p>Please install Go first:</p>
+          <a href="https://go.dev/dl/" target="_blank" class="download-link"
+            >Download Go</a
+          >
+          <p>After installation, please restart this application.</p>
+        </div>
+      </div>
+      <h2>Arbiter Signer Setup</h2>
+      <p>
+        Click the button below to select a folder and start the setup process.
+      </p>
+      <button id="startButton">Select Folder & Start</button>
+      <div class="spinner" id="spinner">Processing...</div>
+
+      <!-- Add new input section -->
+      <div id="inputSection" style="display: none;">
+        <p id="promptText"></p>
+        <input
+          type="text"
+          id="userInput"
+          placeholder="Type your response here..."
+        />
+        <input
+          type="password"
+          id="passwordInput"
+          placeholder="Enter sensitive information here..."
+        />
+        <button id="submitInput">Submit</button>
+      </div>
+
+      <pre
+        id="output"
+        style="height: 300px; overflow-y: auto; background-color: black; color: white; padding: 10px;"
+      ></pre>
+    </div>
+
+    <script>
+      const { ipcRenderer } = require('electron')
+      const { shell } = require('electron')
+
+      document.getElementById('startButton').addEventListener('click', async () => {
+          try {
+              const spinner = document.getElementById('spinner')
+              const output = document.getElementById('output')
+              spinner.classList.add('active')
+              output.textContent = 'Selecting folder...'
+
+              const folderPath = await ipcRenderer.invoke('select-folder')
+              if (!folderPath) {
+                  output.textContent = 'No folder selected.'
+                  spinner.classList.remove('active')
+                  return
+              }
+
+              output.textContent = `Selected folder: ${folderPath}\nStarting process...`
+
+              const result = await ipcRenderer.invoke('run-commands', folderPath)
+              output.textContent = result
+          } catch (error) {
+              document.getElementById('output').textContent = `Error: ${error}`
+          } finally {
+              document.getElementById('spinner').classList.remove('active')
+          }
+      })
+
+      // Listen for command output
+      ipcRenderer.on('command-output', (event, output) => {
+          // Assuming you have a pre or div element with id="output" to show the terminal output
+          const outputElement = document.getElementById('output')
+          outputElement.textContent += output
+          // Auto-scroll to bottom
+          outputElement.scrollTop = outputElement.scrollHeight
+      })
+
+      // Modify the prompt-input handler
+      ipcRenderer.on('prompt-input', (event, prompt) => {
+          const inputSection = document.getElementById('inputSection')
+          const promptText = document.getElementById('promptText')
+          const userInput = document.getElementById('userInput')
+          const passwordInput = document.getElementById('passwordInput')
+
+          promptText.textContent = prompt
+          inputSection.style.display = 'block'
+
+          // Determine if this should be a password field
+          const isPasswordField = prompt.toLowerCase().includes('password') ||
+                                prompt.toLowerCase().includes('private key')
+
+          userInput.style.display = isPasswordField ? 'none' : 'block'
+          passwordInput.style.display = isPasswordField ? 'block' : 'none'
+
+          // Clear and focus the appropriate input
+          if (isPasswordField) {
+              passwordInput.value = ''
+              passwordInput.focus()
+          } else {
+              userInput.value = ''
+              userInput.focus()
+          }
+      })
+
+      document.getElementById('submitInput').addEventListener('click', () => {
+          const userInput = document.getElementById('userInput')
+          const passwordInput = document.getElementById('passwordInput')
+          const inputSection = document.getElementById('inputSection')
+
+          // Get value from whichever input is visible
+          const value = userInput.style.display === 'none' ?
+                       passwordInput.value : userInput.value
+
+          ipcRenderer.invoke('submit-input', value)
+          inputSection.style.display = 'none'
+      })
+
+      // Also allow Enter key to submit for both input fields
+      document.getElementById('userInput').addEventListener('keypress', (event) => {
+          if (event.key === 'Enter') {
+              document.getElementById('submitInput').click()
+          }
+      })
+
+      document.getElementById('passwordInput').addEventListener('keypress', (event) => {
+          if (event.key === 'Enter') {
+              document.getElementById('submitInput').click()
+          }
+      })
+
+      // Add Go installation check handler
+      ipcRenderer.on('go-check-result', (event, result) => {
+        const goCheck = document.getElementById('goCheck');
+        const goStatus = document.getElementById('goStatus');
+        const goDownload = document.getElementById('goDownload');
+        const startButton = document.getElementById('startButton');
+
+        goCheck.style.display = 'block';
+
+        if (result.installed) {
+          goCheck.className = 'success';
+          goStatus.textContent = `Go is installed: ${result.version}`;
+          goDownload.style.display = 'none';
+          startButton.disabled = false;
+        } else {
+          goCheck.className = '';
+          goStatus.textContent = 'Go is not installed or not found.';
+          goDownload.style.display = 'block';
+          startButton.disabled = true;
+        }
+      });
+
+      // Modify the Go download link click handler
+      document.querySelector('.download-link').addEventListener('click', (e) => {
+        e.preventDefault();
+        shell.openExternal('https://go.dev/dl/');
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,99 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    
+    steps:
+      - name: Generate version number
+        id: version
+        run: |
+          VERSION="v$(date +'%Y.%m.%d')-$(date +'%H%M')"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Generated version: $VERSION"
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          release_name: Release ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+
+  build:
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        include:
+          - os: macos-latest
+            platform: mac
+            artifact_name: arbiter-signer-setup-mac.dmg
+          - os: ubuntu-latest
+            platform: linux
+            artifact_name: arbiter-signer-setup-linux.AppImage
+          - os: windows-latest
+            platform: win
+            artifact_name: arbiter-signer-setup-win.exe
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm install -g electron-builder
+
+      - name: Build application
+        run: npm run build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./dist/${{ matrix.artifact_name }}
+          asset_name: ${{ matrix.artifact_name }}
+          asset_content_type: application/octet-stream
+
+  update-release:
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Update Release Body
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.create-release.outputs.version }}
+          body: |
+            Release ${{ needs.create-release.outputs.version }}
+            
+            This release includes builds for:
+            - Windows (.exe)
+            - macOS (.dmg)
+            - Linux (.AppImage)
+            
+            Download the appropriate version for your operating system.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
