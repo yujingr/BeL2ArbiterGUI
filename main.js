@@ -60,6 +60,67 @@ const getGoBinaryPath = () => {
   });
 };
 
+// Add new function to check Git binary path
+const getGitBinaryPath = () => {
+  return new Promise((resolve, reject) => {
+    if (process.platform === "win32") {
+      // Common Git installation paths on Windows
+      const commonWinPaths = [
+        "C:\\Program Files\\Git\\cmd\\git.exe",
+        "C:\\Program Files (x86)\\Git\\cmd\\git.exe",
+        `${process.env.LOCALAPPDATA}\\Programs\\Git\\cmd\\git.exe`,
+        `${process.env.ProgramFiles}\\Git\\cmd\\git.exe`,
+      ];
+
+      exec("where git", (error, stdout) => {
+        if (!error && stdout.trim()) {
+          resolve(stdout.trim().split("\n")[0]);
+          return;
+        }
+
+        // If where fails, check common installation paths
+        for (const gitPath of commonWinPaths) {
+          if (fs.existsSync(gitPath)) {
+            resolve(gitPath);
+            return;
+          }
+        }
+
+        reject(
+          new Error("Git binary not found. Please ensure Git is installed.")
+        );
+      });
+    } else {
+      // For macOS and Linux
+      exec("which git", (error, stdout) => {
+        if (!error && stdout.trim()) {
+          resolve(stdout.trim());
+          return;
+        }
+
+        // Common Unix-like system paths
+        const commonUnixPaths = [
+          "/usr/bin/git",
+          "/usr/local/bin/git",
+          "/opt/local/bin/git",
+          "/opt/homebrew/bin/git",
+        ];
+
+        for (const gitPath of commonUnixPaths) {
+          if (fs.existsSync(gitPath)) {
+            resolve(gitPath);
+            return;
+          }
+        }
+
+        reject(
+          new Error("Git binary not found. Please ensure Git is installed.")
+        );
+      });
+    }
+  });
+};
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 800,
@@ -88,19 +149,17 @@ function createWindow() {
   return win;
 }
 
-// Add new function to check Go installation on startup
+// Modify the checkInitialGoInstallation function to also check Git
 async function checkInitialGoInstallation(win) {
   try {
+    // Check Go installation
     const goBin = await getGoBinaryPath();
-
-    // Send initial output to show searching progress
     win.webContents.send(
       "command-output",
       `Checking for Go installation...\nFound Go at: ${goBin}\n`
     );
 
-    // Verify Go works by checking version
-    const result = await new Promise((resolve, reject) => {
+    const goResult = await new Promise((resolve, reject) => {
       exec(`"${goBin}" version`, (error, stdout, stderr) => {
         if (error || stderr) {
           reject(new Error(error ? error.message : stderr));
@@ -110,18 +169,47 @@ async function checkInitialGoInstallation(win) {
       });
     });
 
-    win.webContents.send("go-check-result", {
-      installed: true,
-      version: result.trim(),
+    // Check Git installation
+    const gitBin = await getGitBinaryPath();
+    win.webContents.send(
+      "command-output",
+      `Checking for Git installation...\nFound Git at: ${gitBin}\n`
+    );
+
+    const gitResult = await new Promise((resolve, reject) => {
+      exec(`"${gitBin}" --version`, (error, stdout, stderr) => {
+        if (error || stderr) {
+          reject(new Error(error ? error.message : stderr));
+        } else {
+          resolve(stdout);
+        }
+      });
+    });
+
+    win.webContents.send("installation-check-result", {
+      go: {
+        installed: true,
+        version: goResult.trim(),
+      },
+      git: {
+        installed: true,
+        version: gitResult.trim(),
+      },
     });
   } catch (error) {
     win.webContents.send(
       "command-output",
-      `Error checking Go installation: ${error.message}\n`
+      `Error checking installations: ${error.message}\n`
     );
-    win.webContents.send("go-check-result", {
-      installed: false,
-      error: error.message,
+    win.webContents.send("installation-check-result", {
+      go: {
+        installed: false,
+        error: error.message,
+      },
+      git: {
+        installed: false,
+        error: error.message,
+      },
     });
   }
 }
@@ -202,6 +290,27 @@ ipcMain.handle("run-commands", async (event, folderPath) => {
     const runMainProgram = async () => {
       try {
         const goBin = await getGoBinaryPath();
+
+        // Add go mod tidy before running the main program
+        const goModTidyCommand = `cd "${folderPath}/Arbiter_Signer" && "${goBin}" mod tidy`;
+        event.sender.send("command-output", "Running go mod tidy...\n");
+
+        await new Promise((resolve, reject) => {
+          exec(goModTidyCommand, (error, stdout, stderr) => {
+            if (error) {
+              const errorMsg = `go mod tidy failed:\nError: ${error.message}\nStderr: ${stderr}`;
+              event.sender.send("command-output", `Error: ${errorMsg}\n`);
+              reject(new Error(errorMsg));
+              return;
+            }
+            event.sender.send(
+              "command-output",
+              "go mod tidy completed successfully\n"
+            );
+            resolve();
+          });
+        });
+
         const command = `cd "${folderPath}/Arbiter_Signer" && "${goBin}" run app/arbiter/main.go`;
 
         event.sender.send("command-output", `Executing command: ${command}\n`);
@@ -295,101 +404,122 @@ ipcMain.handle("run-commands", async (event, folderPath) => {
             return;
           }
 
-          // Config file update with better error handling
-          const configPath = path.join(
-            folderPath,
-            "Arbiter_Signer/app/arbiter/manifest/config/config.yaml"
-          );
-          try {
-            let configContent = fs.readFileSync(configPath, "utf8");
-            configContent = configContent.replace(
-              /escArbiterAddress: ".*"/,
-              `escArbiterAddress: "${escArbiterAddress}"`
-            );
-            fs.writeFileSync(configPath, configContent);
-            event.sender.send(
-              "command-output",
-              "Successfully updated config file\n"
-            );
-          } catch (error) {
-            const errorMsg = `Config update failed:\n${error.message}\nPath: ${configPath}`;
-            event.sender.send("command-output", `Error: ${errorMsg}\n`);
-            reject(new Error(errorMsg));
-            return;
-          }
+          // Add go mod tidy before other commands
+          const goModTidyCommand = `cd "${folderPath}/Arbiter_Signer" && "${goBin}" mod tidy`;
+          event.sender.send("command-output", "Running go mod tidy...\n");
 
-          // Now run the remaining commands
-          const mkdirCommand =
-            process.platform === "win32"
-              ? `if not exist "app\\arbiter\\data\\keys" mkdir "app\\arbiter\\data\\keys"`
-              : `mkdir -p app/arbiter/data/keys`;
-
-          const remainingCommands = [
-            `cd "${folderPath}/Arbiter_Signer"`,
-            mkdirCommand,
-            `"${goBin}" run app/keystore-generator/main.go -c btc -s ${btcPrivateKey} -p ${password} -o app/arbiter/data/keys/btcKey`,
-            `"${goBin}" run app/keystore-generator/main.go -c eth -s ${escPrivateKey} -p ${password} -o app/arbiter/data/keys/escKey`,
-            `"${goBin}" run app/arbiter/main.go`,
-          ].join(" && ");
-
-          event.sender.send(
-            "command-output",
-            "Executing keystore commands...\n"
-          );
-
-          childProcess = exec(remainingCommands, {
-            stdin: "pipe",
-            stdout: "pipe",
-            stderr: "pipe",
-          });
-          global.childProcess = childProcess; // Update global reference
-
-          // Add error handler for broken pipe
-          childProcess.stdin.on("error", (error) => {
-            if (error.code === "EPIPE") {
-              // Ignore broken pipe errors during shutdown
-              return;
-            }
-            event.sender.send(
-              "command-output",
-              `Stdin error: ${error.message}\n`
-            );
-          });
-
-          // Stream stdout in real-time
-          childProcess.stdout.on("data", (data) => {
-            const output = data.toString();
-            event.sender.send("command-output", output);
-
-            if (
-              output.includes("?") ||
-              output.toLowerCase().includes("enter") ||
-              output.toLowerCase().includes("input")
-            ) {
-              event.sender.send("prompt-input", output);
-            }
-          });
-
-          // Enhanced stderr handling
-          childProcess.stderr.on("data", (data) => {
-            const errorOutput = data.toString();
-            event.sender.send("command-output", `Error output: ${errorOutput}`);
-          });
-
-          childProcess.on("close", (code) => {
-            if (code === 0) {
-              resolve("Process completed successfully");
-            } else {
-              const errorMsg = `Keystore commands failed with code ${code}. Check the error output above for details.`;
+          exec(goModTidyCommand, (error, stdout, stderr) => {
+            if (error) {
+              const errorMsg = `go mod tidy failed:\nError: ${error.message}\nStderr: ${stderr}`;
               event.sender.send("command-output", `Error: ${errorMsg}\n`);
               reject(new Error(errorMsg));
+              return;
             }
-          });
 
-          childProcess.on("error", (error) => {
-            const errorMsg = `Failed to execute keystore commands: ${error.message}`;
-            event.sender.send("command-output", `Error: ${errorMsg}\n`);
-            reject(new Error(errorMsg));
+            event.sender.send(
+              "command-output",
+              "go mod tidy completed successfully\n"
+            );
+
+            // Config file update with better error handling
+            const configPath = path.join(
+              folderPath,
+              "Arbiter_Signer/app/arbiter/manifest/config/config.yaml"
+            );
+            try {
+              let configContent = fs.readFileSync(configPath, "utf8");
+              configContent = configContent.replace(
+                /escArbiterAddress: ".*"/,
+                `escArbiterAddress: "${escArbiterAddress}"`
+              );
+              fs.writeFileSync(configPath, configContent);
+              event.sender.send(
+                "command-output",
+                "Successfully updated config file\n"
+              );
+            } catch (error) {
+              const errorMsg = `Config update failed:\n${error.message}\nPath: ${configPath}`;
+              event.sender.send("command-output", `Error: ${errorMsg}\n`);
+              reject(new Error(errorMsg));
+              return;
+            }
+
+            // Now run the remaining commands
+            const mkdirCommand =
+              process.platform === "win32"
+                ? `if not exist "app\\arbiter\\data\\keys" mkdir "app\\arbiter\\data\\keys"`
+                : `mkdir -p app/arbiter/data/keys`;
+
+            const remainingCommands = [
+              `cd "${folderPath}/Arbiter_Signer"`,
+              mkdirCommand,
+              `"${goBin}" run app/keystore-generator/main.go -c btc -s ${btcPrivateKey} -p ${password} -o app/arbiter/data/keys/btcKey`,
+              `"${goBin}" run app/keystore-generator/main.go -c eth -s ${escPrivateKey} -p ${password} -o app/arbiter/data/keys/escKey`,
+              `"${goBin}" run app/arbiter/main.go`,
+            ].join(" && ");
+
+            event.sender.send(
+              "command-output",
+              "Executing keystore commands...\n"
+            );
+
+            childProcess = exec(remainingCommands, {
+              stdin: "pipe",
+              stdout: "pipe",
+              stderr: "pipe",
+            });
+            global.childProcess = childProcess; // Update global reference
+
+            // Add error handler for broken pipe
+            childProcess.stdin.on("error", (error) => {
+              if (error.code === "EPIPE") {
+                // Ignore broken pipe errors during shutdown
+                return;
+              }
+              event.sender.send(
+                "command-output",
+                `Stdin error: ${error.message}\n`
+              );
+            });
+
+            // Stream stdout in real-time
+            childProcess.stdout.on("data", (data) => {
+              const output = data.toString();
+              event.sender.send("command-output", output);
+
+              if (
+                output.includes("?") ||
+                output.toLowerCase().includes("enter") ||
+                output.toLowerCase().includes("input")
+              ) {
+                event.sender.send("prompt-input", output);
+              }
+            });
+
+            // Enhanced stderr handling
+            childProcess.stderr.on("data", (data) => {
+              const errorOutput = data.toString();
+              event.sender.send(
+                "command-output",
+                `Error output: ${errorOutput}`
+              );
+            });
+
+            childProcess.on("close", (code) => {
+              if (code === 0) {
+                resolve("Process completed successfully");
+              } else {
+                const errorMsg = `Keystore commands failed with code ${code}. Check the error output above for details.`;
+                event.sender.send("command-output", `Error: ${errorMsg}\n`);
+                reject(new Error(errorMsg));
+              }
+            });
+
+            childProcess.on("error", (error) => {
+              const errorMsg = `Failed to execute keystore commands: ${error.message}`;
+              event.sender.send("command-output", `Error: ${errorMsg}\n`);
+              reject(new Error(errorMsg));
+            });
           });
         });
       } catch (error) {

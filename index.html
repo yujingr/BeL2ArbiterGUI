@@ -114,6 +114,22 @@
         text-decoration: none;
         color: white;
       }
+
+      #gitCheck {
+        background-color: #fff3cd;
+        border: 1px solid #ffeeba;
+        color: #856404;
+        margin-bottom: 20px;
+        padding: 15px;
+        border-radius: 4px;
+        display: none;
+      }
+
+      #gitCheck.success {
+        background-color: #d4edda;
+        border-color: #c3e6cb;
+        color: #155724;
+      }
     </style>
   </head>
   <body>
@@ -127,6 +143,19 @@
           <p>Please install Go first:</p>
           <a href="https://go.dev/dl/" target="_blank" class="download-link"
             >Download Go</a
+          >
+          <p>After installation, please restart this application.</p>
+        </div>
+      </div>
+      <div id="gitCheck">
+        <p id="gitStatus"></p>
+        <div id="gitDownload" style="display: none;">
+          <p>Please install Git first:</p>
+          <a
+            href="https://git-scm.com/downloads"
+            target="_blank"
+            class="download-link"
+            >Download Git</a
           >
           <p>After installation, please restart this application.</p>
         </div>
@@ -252,31 +281,51 @@
       })
 
       // Add Go installation check handler
-      ipcRenderer.on('go-check-result', (event, result) => {
+      ipcRenderer.on('installation-check-result', (event, result) => {
         const goCheck = document.getElementById('goCheck');
         const goStatus = document.getElementById('goStatus');
         const goDownload = document.getElementById('goDownload');
+        const gitCheck = document.getElementById('gitCheck');
+        const gitStatus = document.getElementById('gitStatus');
+        const gitDownload = document.getElementById('gitDownload');
         const startButton = document.getElementById('startButton');
 
         goCheck.style.display = 'block';
+        gitCheck.style.display = 'block';
 
-        if (result.installed) {
+        // Handle Go check result
+        if (result.go.installed) {
           goCheck.className = 'success';
-          goStatus.textContent = `Go is installed: ${result.version}`;
+          goStatus.textContent = `Go is installed: ${result.go.version}`;
           goDownload.style.display = 'none';
-          startButton.disabled = false;
         } else {
           goCheck.className = '';
           goStatus.textContent = 'Go is not installed or not found.';
           goDownload.style.display = 'block';
-          startButton.disabled = true;
         }
+
+        // Handle Git check result
+        if (result.git.installed) {
+          gitCheck.className = 'success';
+          gitStatus.textContent = `Git is installed: ${result.git.version}`;
+          gitDownload.style.display = 'none';
+        } else {
+          gitCheck.className = '';
+          gitStatus.textContent = 'Git is not installed or not found.';
+          gitDownload.style.display = 'block';
+        }
+
+        // Enable start button only if both Go and Git are installed
+        startButton.disabled = !(result.go.installed && result.git.installed);
       });
 
-      // Modify the Go download link click handler
-      document.querySelector('.download-link').addEventListener('click', (e) => {
-        e.preventDefault();
-        shell.openExternal('https://go.dev/dl/');
+      // Add Git download link handler
+      document.querySelectorAll('.download-link').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const url = e.target.href;
+          shell.openExternal(url);
+        });
       });
     </script>
   </body>
