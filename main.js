@@ -453,14 +453,22 @@ ipcMain.handle("run-commands", async (event, folderPath) => {
             const remainingCommands = [
               `cd "${folderPath}/Arbiter_Signer"`,
               mkdirCommand,
-              `"${goBin}" run app/keystore-generator/main.go -c btc -s ${btcPrivateKey} -p ${password} -o app/arbiter/data/keys/btcKey`,
-              `"${goBin}" run app/keystore-generator/main.go -c eth -s ${escPrivateKey} -p ${password} -o app/arbiter/data/keys/escKey`,
-              `"${goBin}" run app/arbiter/main.go`,
+              // For Windows, we need to run go mod tidy in both directories and use proper path separators
+              `"${goBin}" mod tidy`,
+              `cd app\\keystore-generator && "${goBin}" mod tidy`,
+              `cd .. && "${goBin}" run .\\keystore-generator\\main.go -c btc -s ${btcPrivateKey} -p ${password} -o .\\arbiter\\data\\keys\\btcKey`,
+              `"${goBin}" run .\\keystore-generator\\main.go -c eth -s ${escPrivateKey} -p ${password} -o .\\arbiter\\data\\keys\\escKey`,
+              `cd .\\arbiter && "${goBin}" mod tidy`,
+              `"${goBin}" run main.go`,
             ].join(" && ");
 
             event.sender.send(
               "command-output",
-              "Executing keystore commands...\n"
+              `Executing commands with the following configuration:\n` +
+                `Working directory: ${folderPath}/Arbiter_Signer\n` +
+                `Go binary: ${goBin}\n` +
+                `Platform: ${process.platform}\n` +
+                `Commands to run: ${remainingCommands}\n`
             );
 
             childProcess = exec(remainingCommands, {
