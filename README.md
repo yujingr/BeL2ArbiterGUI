@@ -30,6 +30,8 @@ A desktop application that provides an easy-to-use interface for setting up and 
 
 ## Installation
 
+### Pre-built Binaries
+
 1. Download the latest release for your platform from the [Releases](https://github.com/yourusername/arbiter-signer-ui/releases) page:
 
    - macOS: `.dmg` or `.zip` file
@@ -44,6 +46,54 @@ A desktop application that provides an easy-to-use interface for setting up and 
      - Run the `Arbiter.Signer.Setup.x.x.x.exe` installer
      - Note: Some antivirus/security software may incorrectly flag the keystore-generator. You may need to add an exception or temporarily disable the antivirus during setup
    - Linux: Use your package manager or run the AppImage
+
+### Building from Source
+
+1. Prerequisites:
+
+   - Node.js 16 or newer
+   - npm or yarn
+   - Git
+   - Go 1.20 or newer
+
+2. Clone the repository:
+
+   ```bash
+   git clone https://github.com/yujingr/BeL2ArbiterGUI.git
+   cd BeL2ArbiterGUI
+   ```
+
+3. Install dependencies:
+
+   ```bash
+   npm install
+   # or if using yarn
+   yarn install
+   ```
+
+4. Build the application:
+
+   ```bash
+   npm run build
+   # or if using yarn
+   yarn build
+   ```
+
+5. Start the application in development mode:
+
+   ```bash
+   npm run start
+   # or if using yarn
+   yarn start
+   ```
+
+6. To create distributable packages:
+   ```bash
+   npm run dist
+   # or if using yarn
+   yarn dist
+   ```
+   The packaged applications will be available in the `dist` directory.
 
 ## Usage
 
