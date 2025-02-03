@@ -5,7 +5,7 @@
 
 A desktop application that provides an easy-to-use interface for setting up and running the [BeL2Labs Arbiter Signer](https://github.com/BeL2Labs/Arbiter_Signer).
 
-> **Note**: Currently, macOS support is fully tested. Windows and Linux support is under testing. Demo and instruction videos will be released soon.
+> **Note**: macOS and Windows support is fully tested. Linux support is under testing. Demo and instruction videos will be released soon.
 
 ## Features
 
@@ -32,13 +32,17 @@ A desktop application that provides an easy-to-use interface for setting up and 
 
 1. Download the latest release for your platform from the [Releases](https://github.com/yourusername/arbiter-signer-ui/releases) page:
 
-   - macOS: `.dmg` or `.zip` file (fully tested)
-   - Windows: `.exe` installer (testing in progress)
+   - macOS: `.dmg` or `.zip` file
+   - Windows: Two `.exe` installers are provided:
+     - `Arbiter.Signer.Setup.x.x.x.exe` (Recommended) - Git and Go installation checks working
+     - `Arbiter.Signer.x.x.x.exe` - Basic version with Git and Go installation checks that may fail
    - Linux: `.AppImage`, `.deb`, or `.rpm` file (testing in progress)
 
 2. Install the application:
    - macOS: Mount the DMG and drag to Applications
-   - Windows: Run the installer
+   - Windows:
+     - Run the `Arbiter.Signer.Setup.x.x.x.exe` installer
+     - Note: Some antivirus/security software may incorrectly flag the keystore-generator. You may need to add an exception or temporarily disable the antivirus during setup
    - Linux: Use your package manager or run the AppImage
 
 ## Usage
