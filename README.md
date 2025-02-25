@@ -5,7 +5,13 @@
 
 A desktop application that provides an easy-to-use interface for setting up and running the [BeL2Labs Arbiter Signer](https://github.com/BeL2Labs/Arbiter_Signer).
 
-> **Note**: macOS and Windows support is fully tested. Linux support is under testing. Demo and instruction videos will be released soon.
+> **Note**: macOS and Windows support is fully tested.
+
+## Video Demo
+
+[![Arbiter Signer Setup Demo](https://img.youtube.com/vi/ZvyuuJLKRNA/maxresdefault.jpg)](https://youtu.be/ZvyuuJLKRNA)
+
+Click the image above to watch the demo video on YouTube.
 
 ## Features
 
