@@ -210,9 +210,18 @@
               output.textContent = `Selected folder: ${folderPath}\nStarting process...`
 
               const result = await ipcRenderer.invoke('run-commands', folderPath)
-              output.textContent = result
+
+              // Handle the modified response format
+              if (result && !result.success) {
+                  // This is an error result, but we've already displayed the error details
+                  // via command-output events, so we don't need to do much here
+                  output.textContent += `\n\nProcess failed. See details above.`;
+              } else if (result && result.success) {
+                  output.textContent += `\n\n${result.message}`;
+              }
           } catch (error) {
-              document.getElementById('output').textContent = `Error: ${error}`
+              // This should only happen for truly unexpected errors
+              document.getElementById('output').textContent += `\n\nUnexpected error: ${error}`;
           } finally {
               document.getElementById('spinner').classList.remove('active')
           }
@@ -258,11 +267,61 @@
           const userInput = document.getElementById('userInput')
           const passwordInput = document.getElementById('passwordInput')
           const inputSection = document.getElementById('inputSection')
+          const promptText = document.getElementById('promptText')
 
           // Get value from whichever input is visible
           const value = userInput.style.display === 'none' ?
                        passwordInput.value : userInput.value
 
+          // Determine which type of input we're validating based on the prompt
+          const promptLower = promptText.textContent.toLowerCase()
+          let errorMessage = null
+
+          // Validate BTC Private Key
+          if (promptLower.includes('btc private key')) {
+              if (!/^[0-9a-f]{64}$/i.test(value)) {
+                  errorMessage = 'BTC Private Key must be exactly 64 hexadecimal characters (0-9, a-f)'
+              }
+          }
+          // Validate ESC Private Key
+          else if (promptLower.includes('esc private key')) {
+              if (!/^[0-9a-f]{64}$/i.test(value)) {
+                  errorMessage = 'ESC Private Key must be exactly 64 hexadecimal characters (0-9, a-f)'
+              }
+          }
+          // Validate ESC Arbiter Address
+          else if (promptLower.includes('esc arbiter address')) {
+              if (!/^0x[0-9a-f]{40}$/i.test(value)) {
+                  errorMessage = 'ESC Arbiter Address must start with 0x followed by 40 hexadecimal characters'
+              }
+          }
+          // Validate Password (simple non-empty check)
+          else if (promptLower.includes('password')) {
+              if (!value.trim()) {
+                  errorMessage = 'Password cannot be empty'
+              }
+          }
+
+          if (errorMessage) {
+              // Create/update error message element
+              let errorElement = document.getElementById('inputError')
+              if (!errorElement) {
+                  errorElement = document.createElement('p')
+                  errorElement.id = 'inputError'
+                  errorElement.style.color = 'red'
+                  inputSection.insertBefore(errorElement, document.getElementById('submitInput'))
+              }
+              errorElement.textContent = errorMessage
+              return // Stop submission
+          }
+
+          // Clear any existing error message
+          const errorElement = document.getElementById('inputError')
+          if (errorElement) {
+              errorElement.remove()
+          }
+
+          // Proceed with submission
           ipcRenderer.invoke('submit-input', value)
           inputSection.style.display = 'none'
       })

@@ -237,6 +237,23 @@ ipcMain.handle("select-folder", async () => {
   return result.filePaths[0];
 });
 
+// Add validation helper functions
+const validateBtcPrivateKey = (key) => {
+  return /^[0-9a-f]{64}$/i.test(key);
+};
+
+const validateEscPrivateKey = (key) => {
+  return /^[0-9a-f]{64}$/i.test(key);
+};
+
+const validateEscArbiterAddress = (address) => {
+  return /^0x[0-9a-f]{40}$/i.test(address);
+};
+
+const validatePassword = (password) => {
+  return password.trim().length > 0;
+};
+
 ipcMain.handle("run-commands", async (event, folderPath) => {
   return new Promise((resolve, reject) => {
     let btcPrivateKey = "";
@@ -249,7 +266,27 @@ ipcMain.handle("run-commands", async (event, folderPath) => {
     // Store childProcess globally so we can access it during cleanup
     global.childProcess = childProcess;
 
-    // Enhance checkGoInstallation to use the new getGoBinaryPath
+    // Add a new function to handle errors consistently
+    const handleError = (error, context) => {
+      const errorMsg = `ERROR in ${context}: ${error.message}`;
+      console.error(errorMsg, error);
+
+      // Send detailed error to UI
+      event.sender.send(
+        "command-output",
+        `\n\n================ ERROR ================\n${errorMsg}\n=======================================\n\n`
+      );
+
+      // Don't reject immediately - this will allow the error to be displayed
+      // Set a flag to indicate there's been an error
+      global.hasError = true;
+
+      // We'll resolve with an error object instead of rejecting
+      // This prevents the generic "error invoking remote method" message
+      resolve({ success: false, error: errorMsg });
+    };
+
+    // Modified checkGoInstallation to use the new error handler
     const checkGoInstallation = async () => {
       try {
         const goBin = await getGoBinaryPath();
@@ -269,7 +306,8 @@ ipcMain.handle("run-commands", async (event, folderPath) => {
           });
         });
       } catch (error) {
-        throw error;
+        handleError(error, "checkGoInstallation");
+        throw error; // Re-throw to stop the initial setup flow
       }
     };
 
@@ -356,23 +394,26 @@ ipcMain.handle("run-commands", async (event, folderPath) => {
 
         childProcess.on("close", (code) => {
           if (code === 0) {
-            resolve("Process completed successfully");
+            resolve({
+              success: true,
+              message: "Process completed successfully",
+            });
           } else {
             const errorMsg = `Process exited with code ${code}. This might indicate a problem with the command execution.`;
-            event.sender.send("command-output", `Error: ${errorMsg}\n`);
-            reject(new Error(errorMsg));
+            event.sender.send(
+              "command-output",
+              `\n\n================ ERROR ================\n${errorMsg}\n=======================================\n\n`
+            );
+            // Don't reject - allow the user to see the error
+            resolve({ success: false, error: errorMsg });
           }
         });
 
         childProcess.on("error", (error) => {
-          const errorMsg = `Failed to start process: ${error.message}`;
-          event.sender.send("command-output", `Error: ${errorMsg}\n`);
-          reject(new Error(errorMsg));
+          handleError(error, "runMainProgram process");
         });
       } catch (error) {
-        const errorMsg = `Failed to run main program: ${error.message}`;
-        event.sender.send("command-output", `Error: ${errorMsg}\n`);
-        reject(new Error(errorMsg));
+        handleError(error, "runMainProgram");
       }
     };
 
@@ -399,8 +440,11 @@ ipcMain.handle("run-commands", async (event, folderPath) => {
         exec(cloneCommand, async (error, stdout, stderr) => {
           if (error) {
             const errorMsg = `Directory setup failed:\nError: ${error.message}\nStderr: ${stderr}\nCommand: ${cloneCommand}`;
-            event.sender.send("command-output", `Error: ${errorMsg}\n`);
-            reject(new Error(errorMsg));
+            event.sender.send(
+              "command-output",
+              `\n\n================ ERROR ================\n${errorMsg}\n=======================================\n\n`
+            );
+            resolve({ success: false, error: errorMsg }); // Resolve instead of reject
             return;
           }
 
@@ -411,8 +455,11 @@ ipcMain.handle("run-commands", async (event, folderPath) => {
           exec(goModTidyCommand, (error, stdout, stderr) => {
             if (error) {
               const errorMsg = `go mod tidy failed:\nError: ${error.message}\nStderr: ${stderr}`;
-              event.sender.send("command-output", `Error: ${errorMsg}\n`);
-              reject(new Error(errorMsg));
+              event.sender.send(
+                "command-output",
+                `\n\n================ ERROR ================\n${errorMsg}\n=======================================\n\n`
+              );
+              resolve({ success: false, error: errorMsg }); // Resolve instead of reject
               return;
             }
 
@@ -507,25 +554,27 @@ ipcMain.handle("run-commands", async (event, folderPath) => {
 
             childProcess.on("close", (code) => {
               if (code === 0) {
-                resolve("Process completed successfully");
+                resolve({
+                  success: true,
+                  message: "Process completed successfully",
+                });
               } else {
                 const errorMsg = `Keystore commands failed with code ${code}. Check the error output above for details.`;
-                event.sender.send("command-output", `Error: ${errorMsg}\n`);
-                reject(new Error(errorMsg));
+                event.sender.send(
+                  "command-output",
+                  `\n\n================ ERROR ================\n${errorMsg}\n=======================================\n\n`
+                );
+                resolve({ success: false, error: errorMsg }); // Resolve instead of reject
               }
             });
 
             childProcess.on("error", (error) => {
-              const errorMsg = `Failed to execute keystore commands: ${error.message}`;
-              event.sender.send("command-output", `Error: ${errorMsg}\n`);
-              reject(new Error(errorMsg));
+              handleError(error, "runKeystoreCommands process");
             });
           });
         });
       } catch (error) {
-        const errorMsg = `Failed to run keystore commands: ${error.message}`;
-        event.sender.send("command-output", `Error: ${errorMsg}\n`);
-        reject(new Error(errorMsg));
+        handleError(error, "runKeystoreCommands");
       }
     };
 
@@ -536,30 +585,71 @@ ipcMain.handle("run-commands", async (event, folderPath) => {
         childProcess.stdin.write(input + "\n");
         event.sender.send("command-output", input + "\n");
       } else {
-        // Otherwise handle the setup prompts
+        // Otherwise handle the setup prompts with validation
         switch (currentPrompt) {
           case "btc":
+            if (!validateBtcPrivateKey(input)) {
+              event.sender.send(
+                "command-output",
+                "\nERROR: BTC Private Key must be exactly 64 hexadecimal characters (0-9, a-f).\n"
+              );
+              event.sender.send(
+                "prompt-input",
+                "Please enter your BTC Private Key (64 hex characters):"
+              );
+              return;
+            }
             btcPrivateKey = input;
             currentPrompt = "esc";
             event.sender.send(
               "prompt-input",
-              "Please enter your ESC Private Key:"
+              "Please enter your ESC Private Key (64 hex characters):"
             );
             break;
           case "esc":
+            if (!validateEscPrivateKey(input)) {
+              event.sender.send(
+                "command-output",
+                "\nERROR: ESC Private Key must be exactly 64 hexadecimal characters (0-9, a-f).\n"
+              );
+              event.sender.send(
+                "prompt-input",
+                "Please enter your ESC Private Key (64 hex characters):"
+              );
+              return;
+            }
             escPrivateKey = input;
             currentPrompt = "password";
             event.sender.send("prompt-input", "Please enter your Password:");
             break;
           case "password":
+            if (!validatePassword(input)) {
+              event.sender.send(
+                "command-output",
+                "\nERROR: Password cannot be empty.\n"
+              );
+              event.sender.send("prompt-input", "Please enter your Password:");
+              return;
+            }
             password = input;
             currentPrompt = "arbiterAddress";
             event.sender.send(
               "prompt-input",
-              "Please enter your ESC Arbiter Address:"
+              "Please enter your ESC Arbiter Address (starts with 0x followed by 40 hex characters):"
             );
             break;
           case "arbiterAddress":
+            if (!validateEscArbiterAddress(input)) {
+              event.sender.send(
+                "command-output",
+                "\nERROR: ESC Arbiter Address must start with 0x followed by 40 hexadecimal characters.\n"
+              );
+              event.sender.send(
+                "prompt-input",
+                "Please enter your ESC Arbiter Address (starts with 0x followed by 40 hex characters):"
+              );
+              return;
+            }
             escArbiterAddress = input;
             event.sender.send(
               "command-output",
@@ -588,12 +678,14 @@ ipcMain.handle("run-commands", async (event, folderPath) => {
           );
           event.sender.send(
             "prompt-input",
-            "Please enter your BTC Private Key:"
+            "Please enter your BTC Private Key (64 hex characters):"
           );
         }
       })
       .catch((error) => {
-        reject(error);
+        // Instead of rejecting, resolve with error info
+        handleError(error, "initial Go installation check");
+        resolve({ success: false, error: error.message });
       });
   });
 });
